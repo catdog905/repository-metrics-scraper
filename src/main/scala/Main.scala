@@ -41,7 +41,7 @@ object Persistence {
 }
 
 
-object Main {
+object Msain {
   def main(args: Array[String]): Unit = {
     val xa = Transactor.fromDriverManager[IO](
       driver = "org.postgresql.Driver",
