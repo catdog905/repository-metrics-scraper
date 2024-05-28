@@ -1,5 +1,6 @@
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import cats.implicits.catsSyntaxApplicativeId
 import doobie._
 import doobie.implicits._
 import io.circe._
@@ -8,6 +9,7 @@ import requests.Response
 import sttp.client4.quick._
 import sttp.model.Uri
 
+import scala.util._
 import scala.sys.process._
 
 case class GithubApiResponse(repositories: List[GithubRepository])
@@ -75,21 +77,26 @@ object Main {
           if (Persistence.checkExistance(repo).transact(xa).unsafeRunSync()) {
             ()
           } else {
-            Persistence.insertRepo(repo)
-              .flatMap(_ => processRepository(repo))
-              .transact(xa)
-              .unsafeRunSync()
+            try {
+              Persistence.insertRepo(repo)
+                .flatMap(_ => processRepository(repo).get)
+                .transact(xa)
+                .unsafeRunSync()
+            } catch {
+              case e: Throwable =>
+                e.printStackTrace()
+            }
           }
         })
     }
   }
 
-  private def processRepository(repository: GithubRepository): ConnectionIO[Int] = {
+  private def processRepository(repository: GithubRepository): Try[ConnectionIO[Int]] = {
     val hook = sys.addShutdownHook({
       s"rm -rf ${repository.name}".!
     })
     s"git clone ${repository.sshUrl}".!
-    val connectionIO = CKMetrics.save(repository.name, repository.name)
+    val connectionIO = Try(CKMetrics.save(repository.name, repository.name))
     s"rm -rf ${repository.name}".!
     hook.remove()
     connectionIO
